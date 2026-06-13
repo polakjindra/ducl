@@ -580,6 +580,16 @@ body{
 }
 .log-error-body{font-size:13px;color:var(--text-1);line-height:1.5;word-break:break-word;}
 .log-error-actions{margin-top:10px;display:flex;justify-content:flex-end;}
+.log-done{
+  background:var(--surface-raise);border:1px solid var(--border-subtle);
+  border-radius:6px;padding:16px 20px;
+}
+.log-done-title{font-size:13px;font-weight:500;color:var(--text-1);margin-bottom:6px;}
+.log-done-body{font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:8px;}
+.log-done-branch{
+  font-family:'JetBrains Mono',ui-monospace,'SFMono-Regular','SF Mono',Menlo,Consolas,monospace;
+  font-size:11px;color:var(--text-3);
+}
 .retry-btn{
   padding:5px 14px;font-size:12px;font-weight:500;
   background:var(--accent);color:#fff;border:none;
@@ -931,12 +941,10 @@ var TERMINAL = new Set(['done','failed','cancelled']);
 
 var STATUS_LABEL = {
   queued:'Queued', preparing:'Setting up…', interactive:'Ready',
-  pushing:'Pushing…', mr_open:'MR Open',
   done:'Done', failed:'Failed', cancelled:'Cancelled',
 };
 var STATUS_VAR = {
   queued:'--st-queued', preparing:'--st-preparing', interactive:'--st-interactive',
-  pushing:'--st-pushing', mr_open:'--st-mr',
   done:'--st-done', failed:'--st-failed', cancelled:'--st-cancelled',
 };
 
@@ -1715,7 +1723,16 @@ function renderMain(){
   } else if(ws.status==='interactive'){
     el.termWrap.classList.add('on');
     if(terminals.has(ws.id)) showTerminal(ws.id);
-    el.termHint.textContent='interactive · '+ws.branch+' · exit Claude Code to push and open MR';
+    el.termHint.textContent='interactive · '+ws.branch+' · changes are saved in this worktree';
+  } else if(ws.status==='done'){
+    el.chat.classList.add('on');
+    el.chat.innerHTML='';
+    var doneCard=document.createElement('div');
+    doneCard.className='log-done';
+    doneCard.innerHTML='<div class="log-done-title">Session ended.</div>'+
+      '<div class="log-done-body">This worktree is preserved — reopen it from the Branches panel to continue, or ask Claude to commit and push when you\'re ready.</div>'+
+      '<div class="log-done-branch">'+hesc(ws.branch)+'</div>';
+    el.chat.appendChild(doneCard);
   } else {
     el.chat.classList.add('on');
     el.chat.innerHTML='';
@@ -1757,10 +1774,6 @@ function renderComposer(){
     el.taLocked.placeholder='Waiting for a slot…';
   } else if(ws.status==='preparing'){
     el.taLocked.placeholder='Setting up worktree…';
-  } else if(ws.status==='pushing'){
-    el.taLocked.placeholder='Pushing changes…';
-  } else if(ws.status==='mr_open'){
-    el.taLocked.placeholder='MR is open — review in GitLab';
   } else if(ws.status==='done'){
     el.taLocked.placeholder='Done.';
   } else if(ws.status==='failed'){

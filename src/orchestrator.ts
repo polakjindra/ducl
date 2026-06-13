@@ -24,7 +24,6 @@ import {
 } from "./config.js";
 import { conductorSettings } from "./conductorSettings.js";
 import * as git from "./git.js";
-import { openDraftMr, getPipelineStatus } from "./glab.js";
 import { spawnTerminal, killTerminal } from "./terminal.js";
 
 // ── Branch naming ─────────────────────────────────────────────────────────────
@@ -177,21 +176,12 @@ export class Orchestrator extends EventEmitter {
           branch?: string;
           description?: string;
           endedAt?: string;
-          mrUrl?: string | null;
         };
 
         const status = (data.status ?? "done") as WorkspaceStatus;
         if (!TERMINAL_STATES.has(status)) continue;
 
         const endedAt = data.endedAt ? new Date(data.endedAt).getTime() : Date.now();
-        const mrUrl = data.mrUrl || undefined;
-
-        const logs: string[] = [];
-        if (mrUrl) {
-          logs.push(
-            `[${data.endedAt ?? new Date().toISOString()}] Draft MR opened — review and mark ready in GitLab when you're done. ${mrUrl}`
-          );
-        }
 
         const ws: Workspace = {
           id: wsId,
@@ -200,8 +190,7 @@ export class Orchestrator extends EventEmitter {
           branch: data.branch || "",
           worktreePath,
           status,
-          logs,
-          mrUrl,
+          logs: [],
           historical: true,
           createdAt: endedAt,
           updatedAt: endedAt,
@@ -330,7 +319,7 @@ export class Orchestrator extends EventEmitter {
         },
         () => {
           console.log(`[run] terminal exited for ${workspace.id.slice(0, 8)}`);
-          void this.handleTerminalExit(workspace);
+          this.handleTerminalExit(workspace);
         }
       );
     } catch (err) {
@@ -350,24 +339,11 @@ export class Orchestrator extends EventEmitter {
     this.terminalExitResolvers.delete(workspace.id);
   }
 
-  private async handleTerminalExit(workspace: Workspace): Promise<void> {
-    // Free the concurrency slot immediately when terminal exits so dispatch()
-    // can start the next queued workspace without waiting for push/MR.
+  private handleTerminalExit(workspace: Workspace): void {
     this.terminalExitResolvers.get(workspace.id)?.();
-
     if (!this.isTerminal(workspace)) {
-      let changed = false;
-      try {
-        changed = await git.hasChanges(workspace.worktreePath);
-      } catch { /* worktree may have been removed */ }
-
-      if (changed) {
-        await this.tryCommit(workspace, "conductor: session changes");
-        await this.pushAndOpenMr(workspace);
-      } else {
-        this.transition(workspace, "done");
-        this.tryWriteStatus(workspace, "session ended with no changes");
-      }
+      this.transition(workspace, "done");
+      this.tryWriteStatus(workspace, "session ended");
     }
   }
 
@@ -418,15 +394,6 @@ export class Orchestrator extends EventEmitter {
     });
   }
 
-  private async tryCommit(workspace: Workspace, message: string): Promise<void> {
-    try {
-      const changed = await git.hasChanges(workspace.worktreePath);
-      if (changed) await git.commit(workspace.worktreePath, message);
-    } catch (e) {
-      this.log(workspace, `commit warning: ${e}`);
-    }
-  }
-
   private tryWriteStatus(workspace: Workspace, reason: string): void {
     try {
       writeFileSync(
@@ -438,7 +405,6 @@ export class Orchestrator extends EventEmitter {
             branch: workspace.branch,
             description: workspace.description,
             endedAt: new Date().toISOString(),
-            mrUrl: workspace.mrUrl ?? null,
           },
           null,
           2
@@ -447,102 +413,6 @@ export class Orchestrator extends EventEmitter {
     } catch {
       // Worktree may not exist (e.g. cancelled while queued)
     }
-  }
-
-  private async pushAndOpenMr(workspace: Workspace): Promise<void> {
-    this.transition(workspace, "pushing");
-
-    try {
-      await git.push(workspace.worktreePath, workspace.branch);
-    } catch (err) {
-      this.log(workspace, `[error] push failed: ${err}`);
-      this.transition(workspace, "failed");
-      this.tryWriteStatus(
-        workspace,
-        `push failed — branch is at ${workspace.branch}, push manually`
-      );
-      return;
-    }
-
-    let mrInfo;
-    try {
-      mrInfo = await openDraftMr(
-        workspace.worktreePath,
-        workspace.baseBranch,
-        workspace.branch,
-        workspace.description
-      );
-    } catch (err) {
-      this.log(workspace, `[error] MR creation failed: ${err}`);
-      this.transition(workspace, "failed");
-      this.tryWriteStatus(
-        workspace,
-        `MR creation failed — branch pushed at ${workspace.branch}, create MR manually`
-      );
-      return;
-    }
-
-    workspace.mrUrl = mrInfo.mrUrl;
-    workspace.pipelineId = mrInfo.pipelineId ?? undefined;
-    this.transition(workspace, "mr_open");
-    this.log(
-      workspace,
-      `Draft MR opened — review and mark ready in GitLab when you're done. ${mrInfo.mrUrl}`
-    );
-    // Re-emit so the UI picks up mrUrl from the workspace object
-    this.emit_event({
-      type: "workspace_state_changed",
-      workspaceId: workspace.id,
-      oldStatus: "mr_open",
-      newStatus: "mr_open",
-    });
-
-    if (!workspace.pipelineId) {
-      this.log(workspace, "no pipeline ID — skipping pipeline poll");
-      this.tryWriteStatus(workspace, "MR opened, no pipeline");
-      return;
-    }
-
-    await this.pollPipeline(workspace);
-  }
-
-  private async pollPipeline(workspace: Workspace): Promise<void> {
-    const INITIAL_INTERVAL_MS = 15_000;
-    const BACKOFF_INTERVAL_MS = 60_000;
-    const BACKOFF_AFTER_POLLS = 5;
-
-    let polls = 0;
-
-    const tick = async (): Promise<void> => {
-      if (this.isTerminal(workspace) || !workspace.pipelineId) return;
-
-      const status = await getPipelineStatus(
-        workspace.worktreePath,
-        workspace.pipelineId
-      );
-      this.log(workspace, `pipeline ${workspace.pipelineId} status: ${status}`);
-
-      if (status === "passed") {
-        this.transition(workspace, "done");
-        this.tryWriteStatus(workspace, "pipeline passed");
-        return;
-      }
-      if (status === "failed") {
-        this.transition(workspace, "failed");
-        this.tryWriteStatus(workspace, "pipeline failed");
-        return;
-      }
-      if (status === "no_pipeline" || status === "unknown") {
-        this.log(workspace, "pipeline status indeterminate — stopping poll");
-        return;
-      }
-
-      polls++;
-      const delay = polls < BACKOFF_AFTER_POLLS ? INITIAL_INTERVAL_MS : BACKOFF_INTERVAL_MS;
-      setTimeout(() => tick(), delay);
-    };
-
-    setTimeout(() => tick(), INITIAL_INTERVAL_MS);
   }
 
   private emit_event(event: WsEvent): void {

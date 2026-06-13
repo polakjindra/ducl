@@ -1,6 +1,6 @@
 # ducl
 
-ducl runs multiple Claude Code sessions in parallel, each on its own git branch, and opens a GitLab MR when each session ends.
+ducl runs multiple Claude Code sessions in parallel, each in its own git worktree.
 
 ## Prerequisites
 
@@ -70,7 +70,15 @@ Open **http://localhost:4000**
 2. Set the base branch (defaults to `BASE_BRANCH`)
 3. Pick a model and click **Start →**
 
-Claude Code opens in the browser. Work normally in the terminal. When you exit Claude Code (`/exit` or Ctrl+C), ducl automatically pushes the branch and opens a draft MR on GitLab.
+Claude Code opens in the browser. Work normally in the terminal.
+
+## Ending a session
+
+When you're done, exit Claude Code (`/exit` or Ctrl+C). The session ends and the worktree is preserved exactly as you left it — ducl does not automatically commit, push, or create merge requests.
+
+If you want to save your work: ask Claude to commit, push, and open an MR before you exit — Claude has GitLab access via glab and can do this as part of your conversation, just like a normal terminal session.
+
+To continue work later, or to push/MR after the fact: reopen the branch from the Branches panel.
 
 ## Parallel sessions
 

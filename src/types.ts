@@ -3,8 +3,6 @@ export type WorkspaceStatus =
   | "queued"
   | "preparing"
   | "interactive"
-  | "pushing"
-  | "mr_open"
   | "done"
   | "failed"
   | "cancelled";
@@ -31,8 +29,6 @@ export interface Workspace {
   logs: string[];
   model?: string;
   mode?: "new" | "existing";
-  mrUrl?: string;
-  pipelineId?: string;
   historical?: boolean;
   createdAt: number;
   updatedAt: number;
