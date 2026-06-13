@@ -1,0 +1,68 @@
+{
+  "name": "conductor-gitlab",
+  "version": "0.1.0",
+  "description": "AI coding session manager powered by Claude Code",
+  "author": "Jindra Polak",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx --conditions=node src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "preflight": "tsx --conditions=node src/preflight.ts",
+    "electron": "electron electron/main.cjs",
+    "electron:dev": "electron electron/main.cjs",
+    "build:server": "tsc --outDir dist",
+    "dist:win": "npm run build:server && electron-builder --win",
+    "dist:mac": "npm run build:server && electron-builder --mac",
+    "dist": "npm run build:server && electron-builder --win --mac"
+  },
+  "build": {
+    "appId": "com.polakjindra.ducl",
+    "productName": "ducl",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-pty": "^1.1.0",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2"
+  }
+}

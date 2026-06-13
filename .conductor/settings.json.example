@@ -1,0 +1,25 @@
+{
+  // Model pre-selected in the composer dropdown
+  "defaultModel": "claude-sonnet-4-6",
+
+  // Branch that new sessions are cut from (pre-fills the branch input)
+  "defaultBaseBranch": "main",
+
+  // Map short preset names to base branches.
+  // Type "feature" in the branch input → conductor uses "develop" as the base.
+  "branchPresets": {
+    "feature": "develop",
+    "hotfix": "main",
+    "release": "main"
+  },
+
+  // Maximum number of Claude Code sessions running simultaneously (queue the rest)
+  "maxConcurrentAgents": 2,
+
+  // Sent as the first typed message to every new Claude Code session (~1.5s after spawn).
+  // Use this to encode per-repo workflow conventions Claude should always follow.
+  // The session opens with this already submitted, before any user input.
+  //
+  // Example for a Figma → GitLab workflow:
+  "systemPrompt": "You are working in a GitLab repository that follows Conventional Commits.\n\nRules:\n- Use Figma MCP to inspect designs before implementing any UI changes.\n- Never modify files outside the src/ directory unless explicitly asked.\n- Run the test suite before finishing: npm test\n- Commit messages must follow: type(scope): description"
+}
