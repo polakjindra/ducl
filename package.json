@@ -9,6 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "dev": "tsx --conditions=node src/server.ts",
     "typecheck": "tsc --noEmit",
     "preflight": "tsx --conditions=node src/preflight.ts",

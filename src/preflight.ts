@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   accessSync,
+  chmodSync,
   writeFileSync,
   unlinkSync,
   constants,
@@ -246,6 +247,37 @@ function checkWorktreePath(worktreePath: string) {
   }
 }
 
+// 10. node-pty spawn-helper executable bit (macOS only)
+// npm installs these prebuilt binaries without the executable bit, causing
+// every terminal spawn to fail with the opaque "posix_spawnp failed" error.
+// Auto-fix if found non-executable; skip if not present (wrong arch prebuild).
+function checkNodePtySpawnHelper() {
+  if (process.platform !== "darwin") return;
+  const helpers = [
+    join("node_modules", "node-pty", "prebuilds", "darwin-x64", "spawn-helper"),
+    join("node_modules", "node-pty", "prebuilds", "darwin-arm64", "spawn-helper"),
+  ];
+  for (const p of helpers) {
+    if (!existsSync(p)) continue;
+    try {
+      accessSync(p, constants.X_OK);
+      console.log(`✓ node-pty spawn-helper executable: ${p}`);
+    } catch {
+      try {
+        chmodSync(p, 0o755);
+        console.log(`✓ node-pty spawn-helper fixed (chmod +x): ${p}`);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        fail(
+          "node-pty spawn-helper",
+          `${p} is not executable and chmod failed: ${msg}`,
+          `Run manually: chmod +x "${p}"`
+        );
+      }
+    }
+  }
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 export async function preflight(): Promise<void> {
@@ -268,6 +300,7 @@ export async function preflight(): Promise<void> {
   checkGlab();
   checkGlabAuth();
   checkClaudeCli();
+  checkNodePtySpawnHelper();
 
   if (worktreePath) checkWorktreePath(worktreePath);
 
