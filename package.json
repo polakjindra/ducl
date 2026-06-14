@@ -20,7 +20,7 @@
     "dist": "npm run build:server && electron-builder --win --mac"
   },
   "build": {
-    "appId": "com.polakjindra.ducl",
+    "appId": "com.ducl.app",
     "productName": "ducl",
     "asar": false,
     "npmRebuild": false,
