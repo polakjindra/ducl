@@ -181,16 +181,28 @@ export function worktreeRemoveControlled(worktreePath: string, force: boolean): 
   });
 }
 
-/** Lists all local conductor/* branch names. */
-export async function listLocalConductorBranches(): Promise<string[]> {
-  const r = await git(["branch", "--list", "conductor/*", "--format=%(refname:short)"]);
-  return r.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+/** Lists all local branches under conductor/* and optionally a second prefix/*. */
+export async function listLocalConductorBranches(branchPrefix?: string): Promise<string[]> {
+  const patterns = ["conductor/*"];
+  if (branchPrefix && branchPrefix !== "conductor") patterns.push(`${branchPrefix}/*`);
+  const results = await Promise.all(
+    patterns.map((pat) => git(["branch", "--list", pat, "--format=%(refname:short)"]))
+  );
+  const all = results.flatMap((r) => r.stdout.split("\n").map((l) => l.trim()).filter(Boolean));
+  return [...new Set(all)];
 }
 
-/** Lists all remote conductor/* branch names (strips "origin/" prefix). */
-export async function listRemoteConductorBranches(): Promise<string[]> {
-  const r = await git(["branch", "-r", "--list", "origin/conductor/*", "--format=%(refname:short)"]);
-  return r.stdout.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^origin\//, ""));
+/** Lists all remote branches under conductor/* and optionally a second prefix/* (strips "origin/" prefix). */
+export async function listRemoteConductorBranches(branchPrefix?: string): Promise<string[]> {
+  const patterns = ["origin/conductor/*"];
+  if (branchPrefix && branchPrefix !== "conductor") patterns.push(`origin/${branchPrefix}/*`);
+  const results = await Promise.all(
+    patterns.map((pat) => git(["branch", "-r", "--list", pat, "--format=%(refname:short)"]))
+  );
+  const all = results.flatMap((r) =>
+    r.stdout.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^origin\//, ""))
+  );
+  return [...new Set(all)];
 }
 
 /** Returns the ISO-8601 date of the most recent commit on a branch (local then remote fallback). */

@@ -1,7 +1,7 @@
 import { config as loadDotenv } from "dotenv";
 import { existsSync } from "fs";
 import { execFileSync } from "child_process";
-import { resolve, join } from "path";
+import { resolve, join, basename } from "path";
 import { homedir } from "os";
 
 // DUCL_CONFIG_DIR is set by Electron's main process:
@@ -24,6 +24,14 @@ function optional_int(key: string, fallback: number): number {
 
 export const REPO_PATH = (() => { const v = process.env["REPO_PATH"]; return v ? resolve(v) : ""; })();
 export const WORKTREE_BASE_PATH = (() => { const v = process.env["WORKTREE_BASE_PATH"]; return v ? resolve(v) : ""; })();
+
+// Derive a sanitized branch prefix from the managed repo's directory name.
+// Falls back to "conductor" when REPO_PATH is not yet configured (first-run).
+export const REPO_NAME: string = (() => {
+  const raw = REPO_PATH ? basename(REPO_PATH) : "";
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/^-+|-+$/g, "");
+  return slug || "conductor";
+})();
 export const BASE_BRANCH = process.env["BASE_BRANCH"] ?? "main";
 export const MAX_CONCURRENT_AGENTS = optional_int("MAX_CONCURRENT_AGENTS", 3);
 export const PORT = optional_int("PORT", 4000);

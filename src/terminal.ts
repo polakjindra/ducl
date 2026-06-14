@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import { accessSync, constants } from "fs";
+import { accessSync, constants, existsSync, realpathSync } from "fs";
 import type { IPty } from "node-pty";
 import { CLAUDE_BIN } from "./config.js";
 import type { Workspace } from "./types.js";
@@ -28,17 +28,34 @@ function resolveSpawn(claudeBin: string): { bin: string; cmdArgs: string[] } {
   return { bin: "cmd.exe", cmdArgs: ["/c", claudeBin] };
 }
 
-// On Mac/Linux verify the claude binary is executable before handing it to
-// node-pty — posix_spawnp gives an opaque error if the file is missing or
-// not executable, so we surface a clear message here instead.
+// On Mac/Linux verify the claude binary exists and is executable before handing
+// it to node-pty — posix_spawnp gives an opaque error for any of these failures.
+// Symlinks (common for npm global installs) are resolved to check the real target.
 function assertClaudeExecutable(claudeBin: string): void {
   if (process.platform === "win32") return; // cmd.exe wrapper handles it
+
+  if (!existsSync(claudeBin)) {
+    throw new Error(
+      `Claude CLI binary not found at "${claudeBin}". ` +
+      `Install it (https://claude.ai/download) or set CLAUDE_BIN in .env.`
+    );
+  }
+
+  let resolved = claudeBin;
   try {
-    accessSync(claudeBin, constants.X_OK);
+    resolved = realpathSync(claudeBin);
   } catch {
     throw new Error(
-      `Claude CLI not found or not executable at "${claudeBin}". ` +
-      `Install it (https://claude.ai/download) or set CLAUDE_BIN in .env to the correct path.`
+      `Claude CLI path "${claudeBin}" is a broken symlink — the target does not exist.`
+    );
+  }
+
+  try {
+    accessSync(resolved, constants.X_OK);
+  } catch {
+    throw new Error(
+      `Claude CLI at "${claudeBin}" (→ "${resolved}") is not executable. ` +
+      `Try: chmod +x "${resolved}"`
     );
   }
 }
@@ -56,6 +73,14 @@ export function spawnTerminal(
   }
 
   assertClaudeExecutable(CLAUDE_BIN);
+
+  // Verify the worktree directory exists — if not, git worktree setup failed
+  if (!existsSync(workspace.worktreePath)) {
+    throw new Error(
+      `Worktree directory not found: "${workspace.worktreePath}". ` +
+      `Git worktree setup may have failed — check the session logs.`
+    );
+  }
 
   const { bin, cmdArgs } = resolveSpawn(CLAUDE_BIN);
   const args = initialMessage
@@ -79,10 +104,14 @@ export function spawnTerminal(
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    // On Mac, "posix_spawnp failed" with a correct binary path usually means
-    // node-pty's own spawn-helper binary is quarantined by Gatekeeper. Fix:
+    // On Mac, "posix_spawnp failed" with a valid, executable binary path usually
+    // means node-pty's own spawn-helper binary is quarantined by Gatekeeper. Fix:
     //   xattr -dr com.apple.quarantine node_modules/@lydell/node-pty
-    throw new Error(`Failed to spawn terminal (${spawnCtx}): ${msg}`);
+    // This is a packaging issue, not an app code issue.
+    const hint = process.platform === "darwin" && msg.includes("posix_spawnp")
+      ? " — Mac: if the path above is correct, node-pty's spawn-helper may be Gatekeeper-quarantined; run: xattr -dr com.apple.quarantine node_modules/@lydell/node-pty"
+      : "";
+    throw new Error(`Failed to spawn terminal (${spawnCtx}): ${msg}${hint}`);
   }
 
   const session: TerminalSession = { proc, outputBuffer: [], bufferSize: 0 };

@@ -20,6 +20,7 @@ import {
   BASE_BRANCH,
   WORKTREE_BASE_PATH,
   MAX_CONCURRENT_AGENTS,
+  REPO_NAME,
   runtimeConfig,
 } from "./config.js";
 import { conductorSettings } from "./conductorSettings.js";
@@ -40,9 +41,9 @@ function makeSlug(description: string): string {
 
 async function makeBranch(description: string): Promise<string> {
   const slug = makeSlug(description);
-  const base = `conductor/${slug}`;
+  const base = `${REPO_NAME}/${slug}`;
   const valid = await git.checkRefFormat(base);
-  return valid ? base : "conductor/task";
+  return valid ? base : `${REPO_NAME}/task`;
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────

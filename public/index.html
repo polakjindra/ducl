@@ -1029,6 +1029,7 @@ var S = {
   branchPresets: {},
   defaultBase:   'main',
   maxConcurrent: 2,
+  branchPrefix:  'conductor',
 };
 
 var firstRunMode = false;
@@ -1179,6 +1180,7 @@ fetch('/config').then(function(r){ return r.ok?r.json():null; }).then(function(c
     renderPresetChips();
   }
   if(typeof cfg.maxConcurrentAgents==='number') S.maxConcurrent=cfg.maxConcurrentAgents;
+  if(cfg.branchPrefix) S.branchPrefix=cfg.branchPrefix;
 }).catch(function(){});
 
 function renderPresetChips(){
@@ -1220,7 +1222,7 @@ function wsTitle(ws){
   if(ws.description) return ws.description;
   var b=ws.branch||'';
   if(ws.mode==='existing') return b||ws.id.slice(0,8);
-  // conductor/slug/hash → show slug
+  // prefix/slug or prefix/slug/hash → show slug
   var parts=b.split('/');
   if(parts.length>=3) return parts.slice(1,parts.length-1).join('/');
   if(parts.length===2) return parts[1];
@@ -1464,7 +1466,7 @@ function updateBranchPreview(){
   var val=el.nsBname.value.trim();
   if(!val){ el.nsBpreview.textContent=''; return; }
   var slug=val.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'task';
-  el.nsBpreview.textContent='→ conductor/'+slug;
+  el.nsBpreview.textContent='→ '+(S.branchPrefix||'conductor')+'/'+slug;
 }
 
 function clearBranchCollide(){
@@ -1483,7 +1485,7 @@ function scheduleBranchCollideCheck(){
     var val=el.nsBname.value.trim();
     if(!val){clearBranchCollide();return;}
     var slug=val.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'task';
-    var candidate='conductor/'+slug;
+    var candidate=(S.branchPrefix||'conductor')+'/'+slug;
     var collision=cachedBranches.indexOf(candidate)!==-1;
     if(collision){
       branchCollideError=true;

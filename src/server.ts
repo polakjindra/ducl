@@ -10,7 +10,7 @@ import { writeToTerminal, resizeTerminal, getBufferedOutput } from "./terminal.j
 import * as git from "./git.js";
 import * as glab from "./glab.js";
 import { exec } from "./util/exec.js";
-import { PORT, MAX_CONCURRENT_AGENTS, WORKTREE_BASE_PATH, REPO_PATH, CLAUDE_BIN, runtimeConfig, CONFIG_DIR } from "./config.js";
+import { PORT, MAX_CONCURRENT_AGENTS, WORKTREE_BASE_PATH, REPO_PATH, REPO_NAME, CLAUDE_BIN, runtimeConfig, CONFIG_DIR } from "./config.js";
 import { conductorSettings } from "./conductorSettings.js";
 import type { WsEvent, AttachmentInput } from "./types.js";
 import { TERMINAL_STATES } from "./types.js";
@@ -93,6 +93,7 @@ app.get("/config", (_req, res) => {
     defaultBaseBranch: conductorSettings.defaultBaseBranch ?? "main",
     branchPresets: conductorSettings.branchPresets ?? {},
     maxConcurrentAgents: conductorSettings.maxConcurrentAgents ?? MAX_CONCURRENT_AGENTS,
+    branchPrefix: REPO_NAME,
   });
 });
 
@@ -181,8 +182,8 @@ app.get("/worktrees", async (_req, res) => {
   try {
     // Fetch branch lists and MR data in parallel
     const [localBranches, remoteBranches, mrMap] = await Promise.all([
-      git.listLocalConductorBranches().catch(() => [] as string[]),
-      git.listRemoteConductorBranches().catch(() => [] as string[]),
+      git.listLocalConductorBranches(REPO_NAME).catch(() => [] as string[]),
+      git.listRemoteConductorBranches(REPO_NAME).catch(() => [] as string[]),
       glab.listConductorMrs(REPO_PATH).catch(() => new Map<string, { status: glab.MrStatus; mrUrl: string }>()),
     ]);
 
@@ -197,7 +198,7 @@ app.get("/worktrees", async (_req, res) => {
     const worktreeByBranch = new Map<string, { path: string; mtime: Date; changesCount: number; dirExists: boolean }>();
     const registeredWorktrees = await git.listWorktrees().catch(() => [] as git.WorktreeInfo[]);
     await Promise.all(registeredWorktrees.map(async (wt) => {
-      if (wt.isMain || !wt.branch || !wt.branch.startsWith("conductor/")) return;
+      if (wt.isMain || !wt.branch || (!wt.branch.startsWith("conductor/") && !wt.branch.startsWith(REPO_NAME + "/"))) return;
       const dirExists = existsSync(wt.path);
       const stat = dirExists ? statSync(wt.path) : null;
       const changesCount = dirExists ? await git.worktreeChangesCount(wt.path).catch(() => 0) : 0;
