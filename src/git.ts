@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import { exec } from "./util/exec.js";
 import { REPO_PATH } from "./config.js";
 
@@ -22,11 +23,14 @@ function git(args: string[], cwd = REPO_PATH) {
 }
 
 function assertOk(
-  result: { exitCode: number; stderr: string },
+  result: { exitCode: number; stdout: string; stderr: string },
   context: string
 ): void {
   if (result.exitCode !== 0) {
-    throw new Error(`${context}: ${result.stderr.trim() || "(no stderr)"}`);
+    // Include both stderr and stdout: some git versions (or Mac Xcode CLT stubs)
+    // write error details to stdout instead of stderr.
+    const detail = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" | ");
+    throw new Error(`${context}: ${detail || "(no output)"}`);
   }
 }
 
@@ -79,7 +83,10 @@ export function worktreeRemove(worktreePath: string): Promise<void> {
 
 export function worktreePrune(): Promise<void> {
   return withLock(async () => {
-    const r = await git(["worktree", "prune"]);
+    // --expire now: remove stale registrations immediately instead of waiting
+    // for git's default 14-day grace period. This clears orphaned registrations
+    // left by "delete local worktree only" or crashed sessions.
+    const r = await git(["worktree", "prune", "--expire", "now"]);
     assertOk(r, "git worktree prune");
   });
 }

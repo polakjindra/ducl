@@ -265,6 +265,17 @@ export class Orchestrator extends EventEmitter {
           workspace.baseBranch
         );
       }
+
+      // Defensive: verify the directory was actually created on disk.
+      // Guards against git silently failing (e.g. Mac Xcode CLT stubs,
+      // stale lock files causing partial setup) without throwing an error.
+      if (!existsSync(workspace.worktreePath)) {
+        throw new Error(
+          `git worktree add reported success but "${workspace.worktreePath}" was not created. ` +
+          `This may be caused by a stale git lock file — try creating the session again.`
+        );
+      }
+
       worktreeCreated = true;
     } catch (err) {
       this.log(workspace, `[error] worktree creation failed: ${err}`);
