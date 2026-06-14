@@ -156,18 +156,27 @@ function checkGlabAuth() {
     );
 }
 
-// 8. claude CLI is locatable (hard fail — required for all workspaces)
+// On Mac/Linux check both existence and executable bit.
+function isExecutable(p: string): boolean {
+  if (!existsSync(p)) return false;
+  if (process.platform === "win32") return true;
+  try { accessSync(p, constants.X_OK); return true; } catch { return false; }
+}
+
+// 8. claude CLI is locatable and executable (hard fail — required for all workspaces)
 function checkClaudeCli() {
   const envBin = process.env.CLAUDE_BIN;
   if (envBin) {
     const abs = resolve(envBin);
-    if (existsSync(abs)) {
+    if (isExecutable(abs)) {
       console.log(`✓ claude CLI: ${abs} (from CLAUDE_BIN)`);
       return;
     }
     fail(
       "claude CLI",
-      `CLAUDE_BIN is set but file does not exist: ${abs}`,
+      existsSync(abs)
+        ? `CLAUDE_BIN exists but is not executable: ${abs}`
+        : `CLAUDE_BIN is set but file does not exist: ${abs}`,
       "Fix CLAUDE_BIN in .env to point to the claude binary"
     );
   }
@@ -176,7 +185,8 @@ function checkClaudeCli() {
   const cmd = process.platform === "win32" ? "where" : "which";
   const result = run(cmd, ["claude"]);
   if (result.ok && result.out) {
-    console.log(`✓ claude CLI: ${result.out.split("\n")[0].trim()}`);
+    const found = result.out.split("\n")[0].trim();
+    console.log(`✓ claude CLI: ${found}`);
     return;
   }
 
@@ -186,7 +196,7 @@ function checkClaudeCli() {
     ? [join(home, ".local", "bin", "claude"), join(home, ".local", "bin", "claude.cmd")]
     : [join(home, ".local", "bin", "claude"), "/usr/local/bin/claude", "/opt/homebrew/bin/claude"];
   for (const cand of candidates) {
-    if (existsSync(cand)) {
+    if (isExecutable(cand)) {
       console.log(`✓ claude CLI: ${cand} (fallback)`);
       return;
     }
